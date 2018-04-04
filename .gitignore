@@ -1,0 +1,11 @@
+#idea相关文件
+.idea/
+*.iml
+
+#编译生成的目标文件
+target/
+
+#非公开文件
+gaoyang-service/
+*Test.java
+javalogfile/
