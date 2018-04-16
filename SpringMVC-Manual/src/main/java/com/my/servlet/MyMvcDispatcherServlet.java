@@ -35,6 +35,7 @@ public class MyMvcDispatcherServlet extends HttpServlet {
         System.out.println("URL: " + req.getRequestURL());
         String requestUrl = req.getRequestURI().replace(req.getContextPath(), "");
         System.out.println("requestUrl: " + requestUrl);
+        resp.setContentType("text/html; charset=UTF-8");
         MatchMethod matchMethod = methodMap.get(requestUrl);
         if (matchMethod == null) {
             System.out.println("not match request url: " + requestUrl);
@@ -44,22 +45,8 @@ public class MyMvcDispatcherServlet extends HttpServlet {
         }
 
         try {
-
-            Object[] objects = null;
-            if (matchMethod.params.size() > 0) {
-                objects = new Object[matchMethod.params.size()];
-                int i = 0;
-
-                for (Map.Entry<String, Class> param : matchMethod.params.entrySet()) {
-                    String paramValue = req.getParameter(param.getKey());
-                    if (paramValue == null) {
-                        resp.getWriter().write(param.getKey() + "不能为空");
-                        return;
-                    }
-                    objects[i++] = paramValue;
-                }
-            }
-            matchMethod.method.invoke(matchMethod.controller, objects);
+            Object[] params = paramsPattern(req, matchMethod.method);
+            matchMethod.method.invoke(matchMethod.controller, params);
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         } catch (InvocationTargetException e) {
@@ -80,6 +67,10 @@ public class MyMvcDispatcherServlet extends HttpServlet {
 
     }
 
+    /**
+     * 扫描指定包下的类
+     * @param packageName
+     */
     private void scanClasses(String packageName) {
         URL ur = this.getClass().getClassLoader().getResource(packageName.replace(".", "/"));
         File file = new File(ur.getFile());
@@ -103,6 +94,10 @@ public class MyMvcDispatcherServlet extends HttpServlet {
 
     }
 
+    /**
+     * 根据类注册bean
+     * @param clazz
+     */
     private void registerBean(Class clazz) {
 
         Annotation controllerA = clazz.getAnnotation(MyController.class);
@@ -146,6 +141,9 @@ public class MyMvcDispatcherServlet extends HttpServlet {
         }
     }
 
+    /**
+     * 自动注入bean
+     */
     private void autoWired() {
         for (Map.Entry<String, Object> map : scannedClasses.entrySet()) {
             Field[] fields = map.getValue().getClass().getDeclaredFields();
@@ -176,6 +174,9 @@ public class MyMvcDispatcherServlet extends HttpServlet {
         }
     }
 
+    /**
+     * 方法映射
+     */
     private void methodPattern() {
         for (Map.Entry<String, Object> map : scannedClasses.entrySet()) {
             if (map.getValue().getClass().getAnnotation(MyController.class) == null ||
@@ -200,20 +201,6 @@ public class MyMvcDispatcherServlet extends HttpServlet {
                 }
 
                 MatchMethod matchMethod = new MatchMethod(map.getValue(), method);
-                Map<String, Class> params = new LinkedHashMap<String, Class>();
-                matchMethod.params = params;
-                //获取到参数
-                Parameter[] parameters = method.getParameters();
-                for (Parameter parameter : parameters) {
-                    MyRequestParam requestParamAnnotation = parameter.getAnnotation(MyRequestParam.class);
-                    if (requestParamAnnotation == null) {
-                        continue;
-                    }
-
-                    params.put(requestParamAnnotation.value(), parameter.getType());
-                    System.out.println(firstUriValue + secondUriValue + "成功匹配到注解参数：" + requestParamAnnotation.value());
-                }
-
                 methodMap.put(firstUriValue + secondUriValue, matchMethod);
             }
 
@@ -222,6 +209,42 @@ public class MyMvcDispatcherServlet extends HttpServlet {
 
     }
 
+    private Object[] paramsPattern(HttpServletRequest req, Method method){
+
+        Object[] objects = null;
+        //获取到参数
+        Parameter[] parameters = method.getParameters();
+        if(parameters.length <= 0){
+            return null;
+        }
+        objects = new Object[parameters.length];
+
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter parameter = parameters[i];
+            Object paramValue = null;
+            //先判断接口参数有没有@MyRequestParam注解
+            MyRequestParam paramAnnotation = parameter.getAnnotation(MyRequestParam.class);
+            if (paramAnnotation != null) {
+                paramValue = req.getParameter(paramAnnotation.value());
+            }else {
+                //否则判断接口参数有没有@MyPathValue注解
+                MyPathValue pathValueAnnotation = parameter.getAnnotation(MyPathValue.class);
+                if(pathValueAnnotation != null) {
+                    //从url上匹配到该参数的值，如http://localhost:8080/user/registWithParam/123/ 匹配出123
+
+                }
+            }
+            objects[i] = paramValue;
+        }
+
+        return objects;
+    }
+
+    /**
+     * 将字符串首字母小写
+     * @param str
+     * @return 首字母为小写的字符串
+     */
     private String getFirstLowerString(String str) {
         char[] chars = str.toCharArray();
         if (chars[0] < 97) {
